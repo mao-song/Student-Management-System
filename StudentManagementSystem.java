@@ -1,9 +1,7 @@
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.*;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,16 +9,13 @@ public class StudentManagementSystem extends JFrame {
     private JTable studentTable;
     private DefaultTableModel tableModel;
     private JTextField searchField;
-    private List<Student> studentList = new ArrayList<>();
-    private static final String FILE_NAME = "students.dat";
+    private static final String DB_URL = "jdbc:sqlite:students.db";
 
     public StudentManagementSystem() {
-        // 初始化界面
         setTitle("学生成绩管理系统");
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        loadData(); // 加载数据
 
         // 创建表格模型
         String[] columnNames = {"学号", "姓名", "班级", "高等数学", "大学英语", "计算机导论", "体育"};
@@ -34,10 +29,8 @@ public class StudentManagementSystem extends JFrame {
         JButton deleteButton = new JButton("删除学生");
         JButton searchButton = new JButton("查询学生");
         JButton failButton = new JButton("不及格名单");
-        JButton saveButton = new JButton("保存数据");
         searchField = new JTextField(20);
 
-        // 按钮面板
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(addButton);
         buttonPanel.add(editButton);
@@ -46,27 +39,46 @@ public class StudentManagementSystem extends JFrame {
         buttonPanel.add(searchField);
         buttonPanel.add(searchButton);
         buttonPanel.add(failButton);
-        buttonPanel.add(saveButton);
 
-        // 添加组件到主窗口
         add(buttonPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
-        // 按钮事件处理
+        // 按钮事件
         addButton.addActionListener(e -> addStudent());
         editButton.addActionListener(e -> editStudent());
         deleteButton.addActionListener(e -> deleteStudent());
         searchButton.addActionListener(e -> searchStudent());
         failButton.addActionListener(e -> showFailList());
-        saveButton.addActionListener(e -> saveData());
+
+        // 初始化数据库
+        createTableIfNotExists();
 
         // 初始刷新表格
         refreshTable();
     }
 
-    // 刷新表格数据
+    // 创建表
+    private void createTableIfNotExists() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+            String sql = "CREATE TABLE IF NOT EXISTS students (" +
+                    "id TEXT PRIMARY KEY," +
+                    "name TEXT," +
+                    "className TEXT," +
+                    "math INTEGER," +
+                    "english INTEGER," +
+                    "computer INTEGER," +
+                    "pe INTEGER)";
+            stmt.execute(sql);
+        } catch (SQLException e) {
+            showError("数据库初始化失败: " + e.getMessage());
+        }
+    }
+
+    // 刷新表格
     private void refreshTable() {
         tableModel.setRowCount(0);
+        List<Student> studentList = getAllStudents();
         for (Student student : studentList) {
             Object[] rowData = {
                     student.getId(),
@@ -79,6 +91,30 @@ public class StudentManagementSystem extends JFrame {
             };
             tableModel.addRow(rowData);
         }
+    }
+
+    // 获取所有学生
+    private List<Student> getAllStudents() {
+        List<Student> list = new ArrayList<>();
+        String sql = "SELECT * FROM students";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new Student(
+                        rs.getString("id"),
+                        rs.getString("name"),
+                        rs.getString("className"),
+                        rs.getInt("math"),
+                        rs.getInt("english"),
+                        rs.getInt("computer"),
+                        rs.getInt("pe")
+                ));
+            }
+        } catch (SQLException e) {
+            showError("读取数据失败: " + e.getMessage());
+        }
+        return list;
     }
 
     // 添加学生
@@ -108,7 +144,7 @@ public class StudentManagementSystem extends JFrame {
         panel.add(peField);
 
         int result = JOptionPane.showConfirmDialog(
-                this, panel, "添加学生信息", 
+                this, panel, "添加学生信息",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 
         if (result == JOptionPane.OK_OPTION) {
@@ -122,23 +158,47 @@ public class StudentManagementSystem extends JFrame {
                         Integer.parseInt(computerField.getText()),
                         Integer.parseInt(peField.getText())
                 );
-                studentList.add(student);
+                insertStudent(student);
                 refreshTable();
             } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(this, "成绩必须为数字!", "输入错误", JOptionPane.ERROR_MESSAGE);
+                showError("成绩必须为数字!");
             }
         }
     }
 
-    // 修改学生信息
+    // 插入学生
+    private void insertStudent(Student student) {
+        String sql = "INSERT INTO students (id, name, className, math, english, computer, pe) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, student.getId());
+            pstmt.setString(2, student.getName());
+            pstmt.setString(3, student.getClassName());
+            pstmt.setInt(4, student.getMath());
+            pstmt.setInt(5, student.getEnglish());
+            pstmt.setInt(6, student.getComputer());
+            pstmt.setInt(7, student.getPe());
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            showError("添加学生失败: " + e.getMessage());
+        }
+    }
+
+    // 修改学生
     private void editStudent() {
         int selectedRow = studentTable.getSelectedRow();
         if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "请先选择学生!", "提示", JOptionPane.WARNING_MESSAGE);
+            showError("请先选择学生!");
             return;
         }
 
-        Student student = studentList.get(selectedRow);
+        String id = (String) tableModel.getValueAt(selectedRow, 0);
+        Student student = getStudentById(id);
+        if (student == null) {
+            showError("未找到该学生!");
+            return;
+        }
+
         JPanel panel = new JPanel(new GridLayout(7, 2));
         JTextField idField = new JTextField(student.getId());
         JTextField nameField = new JTextField(student.getName());
@@ -148,7 +208,6 @@ public class StudentManagementSystem extends JFrame {
         JTextField computerField = new JTextField(String.valueOf(student.getComputer()));
         JTextField peField = new JTextField(String.valueOf(student.getPe()));
 
-        // 学号不可编辑
         idField.setEditable(false);
 
         panel.add(new JLabel("学号:"));
@@ -167,7 +226,7 @@ public class StudentManagementSystem extends JFrame {
         panel.add(peField);
 
         int result = JOptionPane.showConfirmDialog(
-                this, panel, "修改学生信息", 
+                this, panel, "修改学生信息",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 
         if (result == JOptionPane.OK_OPTION) {
@@ -178,10 +237,53 @@ public class StudentManagementSystem extends JFrame {
                 student.setEnglish(Integer.parseInt(englishField.getText()));
                 student.setComputer(Integer.parseInt(computerField.getText()));
                 student.setPe(Integer.parseInt(peField.getText()));
+                updateStudent(student);
                 refreshTable();
             } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(this, "成绩必须为数字!", "输入错误", JOptionPane.ERROR_MESSAGE);
+                showError("成绩必须为数字!");
             }
+        }
+    }
+
+    // 获取单个学生
+    private Student getStudentById(String id) {
+        String sql = "SELECT * FROM students WHERE id = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, id);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return new Student(
+                        rs.getString("id"),
+                        rs.getString("name"),
+                        rs.getString("className"),
+                        rs.getInt("math"),
+                        rs.getInt("english"),
+                        rs.getInt("computer"),
+                        rs.getInt("pe")
+                );
+            }
+        } catch (SQLException e) {
+            showError("查询学生失败: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // 更新学生
+    private void updateStudent(Student student) {
+        String sql = "UPDATE students SET name=?, className=?, math=?, english=?, computer=?, pe=? WHERE id=?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, student.getName());
+            pstmt.setString(2, student.getClassName());
+            pstmt.setInt(3, student.getMath());
+            pstmt.setInt(4, student.getEnglish());
+            pstmt.setInt(5, student.getComputer());
+            pstmt.setInt(6, student.getPe());
+            pstmt.setString(7, student.getId());
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            showError("更新学生失败: " + e.getMessage());
         }
     }
 
@@ -189,17 +291,18 @@ public class StudentManagementSystem extends JFrame {
     private void deleteStudent() {
         int selectedRow = studentTable.getSelectedRow();
         if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "请先选择学生!", "提示", JOptionPane.WARNING_MESSAGE);
+            showError("请先选择学生!");
             return;
         }
-
-        int confirm = JOptionPane.showConfirmDialog(
-                this, "确定要删除该学生吗?", "确认删除", 
-                JOptionPane.YES_NO_OPTION);
-        
-        if (confirm == JOptionPane.YES_OPTION) {
-            studentList.remove(selectedRow);
+        String id = (String) tableModel.getValueAt(selectedRow, 0);
+        String sql = "DELETE FROM students WHERE id=?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, id);
+            pstmt.executeUpdate();
             refreshTable();
+        } catch (SQLException e) {
+            showError("删除学生失败: " + e.getMessage());
         }
     }
 
@@ -210,85 +313,73 @@ public class StudentManagementSystem extends JFrame {
             refreshTable();
             return;
         }
-
-        List<Student> resultList = new ArrayList<>();
-        for (Student student : studentList) {
-            if (student.getId().toLowerCase().contains(keyword) || 
-                student.getName().toLowerCase().contains(keyword)) {
-                resultList.add(student);
-            }
-        }
-
         tableModel.setRowCount(0);
-        for (Student student : resultList) {
-            Object[] rowData = {
-                    student.getId(),
-                    student.getName(),
-                    student.getClassName(),
-                    student.getMath(),
-                    student.getEnglish(),
-                    student.getComputer(),
-                    student.getPe()
-            };
-            tableModel.addRow(rowData);
+        String sql = "SELECT * FROM students WHERE lower(id) LIKE ? OR lower(name) LIKE ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            String likeKeyword = "%" + keyword + "%";
+            pstmt.setString(1, likeKeyword);
+            pstmt.setString(2, likeKeyword);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                Object[] rowData = {
+                        rs.getString("id"),
+                        rs.getString("name"),
+                        rs.getString("className"),
+                        rs.getInt("math"),
+                        rs.getInt("english"),
+                        rs.getInt("computer"),
+                        rs.getInt("pe")
+                };
+                tableModel.addRow(rowData);
+            }
+        } catch (SQLException e) {
+            showError("查询失败: " + e.getMessage());
         }
     }
 
     // 显示不及格名单
     private void showFailList() {
         String[] courses = {"高等数学", "大学英语", "计算机导论", "体育"};
+        String[] dbFields = {"math", "english", "computer", "pe"};
         String course = (String) JOptionPane.showInputDialog(
                 this, "请选择课程:", "不及格名单查询",
                 JOptionPane.PLAIN_MESSAGE, null, courses, courses[0]);
-
         if (course == null) return;
+
+        int idx = -1;
+        for (int i = 0; i < courses.length; i++) {
+            if (courses[i].equals(course)) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1) return;
 
         StringBuilder sb = new StringBuilder();
         sb.append(course).append("不及格学生名单:\n\n");
-        
-        for (Student student : studentList) {
-            int score = -1;
-            switch (course) {
-                case "高等数学": score = student.getMath(); break;
-                case "大学英语": score = student.getEnglish(); break;
-                case "计算机导论": score = student.getComputer(); break;
-                case "体育": score = student.getPe(); break;
+
+        String sql = "SELECT * FROM students WHERE " + dbFields[idx] + " < 60";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(String.format("学号: %s  姓名: %s  班级: %s  成绩: %d\n",
+                        rs.getString("id"), rs.getString("name"),
+                        rs.getString("className"), rs.getInt(dbFields[idx])));
             }
-            
-            if (score >= 0 && score < 60) {
-                sb.append(String.format("学号: %s  姓名: %s  班级: %s  成绩: %d\n", 
-                        student.getId(), student.getName(), 
-                        student.getClassName(), score));
-            }
+        } catch (SQLException e) {
+            showError("查询不及格名单失败: " + e.getMessage());
         }
-        
+
         JTextArea textArea = new JTextArea(sb.toString(), 15, 40);
         textArea.setEditable(false);
-        JOptionPane.showMessageDialog(this, new JScrollPane(textArea), 
+        JOptionPane.showMessageDialog(this, new JScrollPane(textArea),
                 course + "不及格名单", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // 保存数据到文件
-    private void saveData() {
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(FILE_NAME))) {
-            oos.writeObject(studentList);
-            JOptionPane.showMessageDialog(this, "数据保存成功!", "成功", JOptionPane.INFORMATION_MESSAGE);
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "保存数据失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    // 从文件加载数据
-    @SuppressWarnings("unchecked")  
-    private void loadData() {
-        File file = new File(FILE_NAME);
-        if (file.exists()) {
-            try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(FILE_NAME))) {
-                studentList = (List<Student>) ois.readObject();
-            } catch (IOException | ClassNotFoundException e) {
-                JOptionPane.showMessageDialog(this, "加载数据失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
-            }
-        }
+    private void showError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "错误", JOptionPane.ERROR_MESSAGE);
     }
 
     public static void main(String[] args) {
@@ -303,7 +394,7 @@ public class StudentManagementSystem extends JFrame {
     }
 }
 
-class Student implements Serializable {
+class Student {
     private String id;
     private String name;
     private String className;
@@ -322,7 +413,6 @@ class Student implements Serializable {
         this.pe = pe;
     }
 
-    // Getters and Setters
     public String getId() { return id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
