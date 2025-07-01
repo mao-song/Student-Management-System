@@ -29,16 +29,18 @@ public class StudentManagementSystem extends JFrame {
         JButton deleteButton = new JButton("删除学生");
         JButton searchButton = new JButton("查询学生");
         JButton failButton = new JButton("不及格名单");
+        JButton refreshButton = new JButton("刷新数据");
         searchField = new JTextField(20);
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(addButton);
         buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
-        buttonPanel.add(new JLabel("学号/姓名:"));
+        buttonPanel.add(new JLabel("学号/姓名/班级:"));
         buttonPanel.add(searchField);
         buttonPanel.add(searchButton);
         buttonPanel.add(failButton);
+        buttonPanel.add(refreshButton);
 
         add(buttonPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
@@ -49,6 +51,7 @@ public class StudentManagementSystem extends JFrame {
         deleteButton.addActionListener(e -> deleteStudent());
         searchButton.addActionListener(e -> searchStudent());
         failButton.addActionListener(e -> showFailList());
+        refreshButton.addActionListener(e -> refreshTable());
 
         // 初始化数据库
         createTableIfNotExists();
@@ -117,6 +120,27 @@ public class StudentManagementSystem extends JFrame {
         return list;
     }
 
+    // 检查学号是否已存在
+    private boolean isStudentIdExists(String id) {
+        String sql = "SELECT COUNT(*) FROM students WHERE id = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, id);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            showError("检查学号失败: " + e.getMessage());
+        }
+        return false;
+    }
+
+    // 验证成绩是否在0-100之间
+    private boolean isValidGrade(int grade) {
+        return grade >= 0 && grade <= 100;
+    }
+
     // 添加学生
     private void addStudent() {
         JPanel panel = new JPanel(new GridLayout(7, 2));
@@ -149,17 +173,49 @@ public class StudentManagementSystem extends JFrame {
 
         if (result == JOptionPane.OK_OPTION) {
             try {
-                Student student = new Student(
-                        idField.getText(),
-                        nameField.getText(),
-                        classField.getText(),
-                        Integer.parseInt(mathField.getText()),
-                        Integer.parseInt(englishField.getText()),
-                        Integer.parseInt(computerField.getText()),
-                        Integer.parseInt(peField.getText())
-                );
+                // 验证学号是否为空
+                String id = idField.getText().trim();
+                if (id.isEmpty()) {
+                    showError("学号不能为空!");
+                    return;
+                }
+
+                // 验证学号是否已存在
+                if (isStudentIdExists(id)) {
+                    showError("学号已存在，请使用其他学号!");
+                    return;
+                }
+
+                // 验证姓名是否为空
+                String name = nameField.getText().trim();
+                if (name.isEmpty()) {
+                    showError("姓名不能为空!");
+                    return;
+                }
+
+                // 验证班级是否为空
+                String className = classField.getText().trim();
+                if (className.isEmpty()) {
+                    showError("班级不能为空!");
+                    return;
+                }
+
+                // 验证成绩
+                int math = Integer.parseInt(mathField.getText());
+                int english = Integer.parseInt(englishField.getText());
+                int computer = Integer.parseInt(computerField.getText());
+                int pe = Integer.parseInt(peField.getText());
+
+                if (!isValidGrade(math) || !isValidGrade(english) || 
+                    !isValidGrade(computer) || !isValidGrade(pe)) {
+                    showError("成绩必须在0-100之间!");
+                    return;
+                }
+
+                Student student = new Student(id, name, className, math, english, computer, pe);
                 insertStudent(student);
                 refreshTable();
+                JOptionPane.showMessageDialog(this, "学生添加成功!", "成功", JOptionPane.INFORMATION_MESSAGE);
             } catch (NumberFormatException e) {
                 showError("成绩必须为数字!");
             }
@@ -231,14 +287,41 @@ public class StudentManagementSystem extends JFrame {
 
         if (result == JOptionPane.OK_OPTION) {
             try {
-                student.setName(nameField.getText());
-                student.setClassName(classField.getText());
-                student.setMath(Integer.parseInt(mathField.getText()));
-                student.setEnglish(Integer.parseInt(englishField.getText()));
-                student.setComputer(Integer.parseInt(computerField.getText()));
-                student.setPe(Integer.parseInt(peField.getText()));
+                // 验证姓名是否为空
+                String name = nameField.getText().trim();
+                if (name.isEmpty()) {
+                    showError("姓名不能为空!");
+                    return;
+                }
+
+                // 验证班级是否为空
+                String className = classField.getText().trim();
+                if (className.isEmpty()) {
+                    showError("班级不能为空!");
+                    return;
+                }
+
+                // 验证成绩
+                int math = Integer.parseInt(mathField.getText());
+                int english = Integer.parseInt(englishField.getText());
+                int computer = Integer.parseInt(computerField.getText());
+                int pe = Integer.parseInt(peField.getText());
+
+                if (!isValidGrade(math) || !isValidGrade(english) || 
+                    !isValidGrade(computer) || !isValidGrade(pe)) {
+                    showError("成绩必须在0-100之间!");
+                    return;
+                }
+
+                student.setName(name);
+                student.setClassName(className);
+                student.setMath(math);
+                student.setEnglish(english);
+                student.setComputer(computer);
+                student.setPe(pe);
                 updateStudent(student);
                 refreshTable();
+                JOptionPane.showMessageDialog(this, "学生信息修改成功!", "成功", JOptionPane.INFORMATION_MESSAGE);
             } catch (NumberFormatException e) {
                 showError("成绩必须为数字!");
             }
@@ -295,14 +378,23 @@ public class StudentManagementSystem extends JFrame {
             return;
         }
         String id = (String) tableModel.getValueAt(selectedRow, 0);
-        String sql = "DELETE FROM students WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, id);
-            pstmt.executeUpdate();
-            refreshTable();
-        } catch (SQLException e) {
-            showError("删除学生失败: " + e.getMessage());
+        String name = (String) tableModel.getValueAt(selectedRow, 1);
+        
+        int confirm = JOptionPane.showConfirmDialog(
+                this, "确定要删除学生 " + name + " (学号: " + id + ") 吗?", "确认删除", 
+                JOptionPane.YES_NO_OPTION);
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            String sql = "DELETE FROM students WHERE id=?";
+            try (Connection conn = DriverManager.getConnection(DB_URL);
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setString(1, id);
+                pstmt.executeUpdate();
+                refreshTable();
+                JOptionPane.showMessageDialog(this, "学生删除成功!", "成功", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException e) {
+                showError("删除学生失败: " + e.getMessage());
+            }
         }
     }
 
@@ -314,12 +406,13 @@ public class StudentManagementSystem extends JFrame {
             return;
         }
         tableModel.setRowCount(0);
-        String sql = "SELECT * FROM students WHERE lower(id) LIKE ? OR lower(name) LIKE ?";
+        String sql = "SELECT * FROM students WHERE lower(id) LIKE ? OR lower(name) LIKE ? OR lower(className) LIKE ?";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             String likeKeyword = "%" + keyword + "%";
             pstmt.setString(1, likeKeyword);
             pstmt.setString(2, likeKeyword);
+            pstmt.setString(3, likeKeyword);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
                 Object[] rowData = {
@@ -332,6 +425,14 @@ public class StudentManagementSystem extends JFrame {
                         rs.getInt("pe")
                 };
                 tableModel.addRow(rowData);
+            }
+            
+            // 显示查询结果数量
+            int rowCount = tableModel.getRowCount();
+            if (rowCount == 0) {
+                JOptionPane.showMessageDialog(this, "未找到匹配的学生信息", "查询结果", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "找到 " + rowCount + " 条匹配的学生信息", "查询结果", JOptionPane.INFORMATION_MESSAGE);
             }
         } catch (SQLException e) {
             showError("查询失败: " + e.getMessage());
@@ -363,10 +464,16 @@ public class StudentManagementSystem extends JFrame {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
+            boolean hasFailStudents = false;
             while (rs.next()) {
+                hasFailStudents = true;
                 sb.append(String.format("学号: %s  姓名: %s  班级: %s  成绩: %d\n",
                         rs.getString("id"), rs.getString("name"),
                         rs.getString("className"), rs.getInt(dbFields[idx])));
+            }
+            
+            if (!hasFailStudents) {
+                sb.append("该课程没有不及格的学生！");
             }
         } catch (SQLException e) {
             showError("查询不及格名单失败: " + e.getMessage());
