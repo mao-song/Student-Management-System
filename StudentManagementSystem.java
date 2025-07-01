@@ -2,6 +2,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.sql.*;
 import java.util.ArrayList;
@@ -15,7 +16,7 @@ public class StudentManagementSystem extends JFrame {
 
     public StudentManagementSystem() {
         setTitle("学生成绩管理系统");
-        setSize(1100, 700);
+        setSize(1230, 760);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -42,6 +43,11 @@ public class StudentManagementSystem extends JFrame {
         studentTable.setSelectionBackground(new Color(220, 235, 245));
         studentTable.setSelectionForeground(Color.BLACK);
 
+        // ====== 新增：表格排序功能 ======
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(tableModel);
+        studentTable.setRowSorter(sorter);
+        // ==============================
+
         // 表头美化
         JTableHeader header = studentTable.getTableHeader();
         header.setFont(new Font("微软雅黑", Font.BOLD, 16));
@@ -67,6 +73,7 @@ public class StudentManagementSystem extends JFrame {
         JButton searchButton = createButton("查询学生");
         JButton failButton = createButton("不及格名单");
         JButton refreshButton = createButton("刷新数据");
+        JButton resetOrderButton = createButton("恢复顺序");
         searchField = new JTextField(16);
         searchField.setFont(new Font("微软雅黑", Font.PLAIN, 15));
         searchField.setPreferredSize(new Dimension(120, 32));
@@ -84,6 +91,7 @@ public class StudentManagementSystem extends JFrame {
         buttonPanel.add(Box.createHorizontalStrut(10));
         buttonPanel.add(failButton);
         buttonPanel.add(refreshButton);
+        buttonPanel.add(resetOrderButton);
 
         // ====== 新增：标题和按钮面板垂直组合 ======
         JPanel northPanel = new JPanel();
@@ -103,6 +111,7 @@ public class StudentManagementSystem extends JFrame {
         searchButton.addActionListener(e -> searchStudent());
         failButton.addActionListener(e -> showFailList());
         refreshButton.addActionListener(e -> refreshTable());
+        resetOrderButton.addActionListener(e -> sorter.setSortKeys(null));
 
         // 初始化数据库
         createTableIfNotExists();
@@ -327,13 +336,13 @@ public class StudentManagementSystem extends JFrame {
 
     // 修改学生
     private void editStudent() {
-        int selectedRow = studentTable.getSelectedRow();
-        if (selectedRow == -1) {
+        int viewRow = studentTable.getSelectedRow();
+        if (viewRow == -1) {
             showError("请先选择学生!");
             return;
         }
-
-        String id = (String) tableModel.getValueAt(selectedRow, 0);
+        int modelRow = studentTable.convertRowIndexToModel(viewRow);
+        String id = (String) tableModel.getValueAt(modelRow, 0);
         Student student = getStudentById(id);
         if (student == null) {
             showError("未找到该学生!");
@@ -460,13 +469,14 @@ public class StudentManagementSystem extends JFrame {
 
     // 删除学生
     private void deleteStudent() {
-        int selectedRow = studentTable.getSelectedRow();
-        if (selectedRow == -1) {
+        int viewRow = studentTable.getSelectedRow();
+        if (viewRow == -1) {
             showError("请先选择学生!");
             return;
         }
-        String id = (String) tableModel.getValueAt(selectedRow, 0);
-        String name = (String) tableModel.getValueAt(selectedRow, 1);
+        int modelRow = studentTable.convertRowIndexToModel(viewRow);
+        String id = (String) tableModel.getValueAt(modelRow, 0);
+        String name = (String) tableModel.getValueAt(modelRow, 1);
 
         int confirm = JOptionPane.showConfirmDialog(
                 this, "确定要删除学生 " + name + " (学号: " + id + ") 吗?", "确认删除",
