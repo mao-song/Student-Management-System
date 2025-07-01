@@ -1,5 +1,7 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.sql.*;
 import java.util.ArrayList;
@@ -13,36 +15,85 @@ public class StudentManagementSystem extends JFrame {
 
     public StudentManagementSystem() {
         setTitle("学生成绩管理系统");
-        setSize(800, 600);
+        setSize(1100, 700);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+
+        // 设置全局字体
+        setUIFont(new Font("微软雅黑", Font.PLAIN, 15));
+
+        // 设置主面板背景色
+        getContentPane().setBackground(new Color(245, 245, 245));
+        setLayout(new BorderLayout(12, 12));
+
+        // ====== 新增：大标题 ======
+        JLabel titleLabel = new JLabel("学生成绩管理系统", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("微软雅黑", Font.BOLD, 28));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(18, 0, 8, 0));
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        // =========================
 
         // 创建表格模型
         String[] columnNames = {"学号", "姓名", "班级", "高等数学", "大学英语", "计算机导论", "体育"};
         tableModel = new DefaultTableModel(columnNames, 0);
         studentTable = new JTable(tableModel);
+        studentTable.setRowHeight(28);
+        studentTable.setFont(new Font("微软雅黑", Font.PLAIN, 15));
+        studentTable.setSelectionBackground(new Color(220, 235, 245));
+        studentTable.setSelectionForeground(Color.BLACK);
+
+        // 表头美化
+        JTableHeader header = studentTable.getTableHeader();
+        header.setFont(new Font("微软雅黑", Font.BOLD, 16));
+        header.setBackground(new Color(230, 230, 230));
+        header.setPreferredSize(new Dimension(header.getWidth(), 32));
+        ((DefaultTableCellRenderer)header.getDefaultRenderer()).setHorizontalAlignment(JLabel.CENTER);
+
+        // 表格居中
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+        for (int i = 0; i < studentTable.getColumnCount(); i++) {
+            studentTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+        }
+
         JScrollPane scrollPane = new JScrollPane(studentTable);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        scrollPane.getViewport().setBackground(new Color(250, 250, 250));
 
         // 创建操作按钮
-        JButton addButton = new JButton("添加学生");
-        JButton editButton = new JButton("修改信息");
-        JButton deleteButton = new JButton("删除学生");
-        JButton searchButton = new JButton("查询学生");
-        JButton failButton = new JButton("不及格名单");
-        JButton refreshButton = new JButton("刷新数据");
-        searchField = new JTextField(20);
+        JButton addButton = createButton("添加学生");
+        JButton editButton = createButton("修改信息");
+        JButton deleteButton = createButton("删除学生");
+        JButton searchButton = createButton("查询学生");
+        JButton failButton = createButton("不及格名单");
+        JButton refreshButton = createButton("刷新数据");
+        searchField = new JTextField(16);
+        searchField.setFont(new Font("微软雅黑", Font.PLAIN, 15));
+        searchField.setPreferredSize(new Dimension(120, 32));
 
         JPanel buttonPanel = new JPanel();
+        buttonPanel.setBackground(new Color(245, 245, 245));
+        buttonPanel.setLayout(new FlowLayout(FlowLayout.LEFT, 12, 10));
         buttonPanel.add(addButton);
         buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
+        buttonPanel.add(Box.createHorizontalStrut(10));
         buttonPanel.add(new JLabel("学号/姓名/班级:"));
         buttonPanel.add(searchField);
         buttonPanel.add(searchButton);
+        buttonPanel.add(Box.createHorizontalStrut(10));
         buttonPanel.add(failButton);
         buttonPanel.add(refreshButton);
 
-        add(buttonPanel, BorderLayout.NORTH);
+        // ====== 新增：标题和按钮面板垂直组合 ======
+        JPanel northPanel = new JPanel();
+        northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.Y_AXIS));
+        northPanel.setBackground(new Color(245, 245, 245));
+        northPanel.add(titleLabel);
+        northPanel.add(buttonPanel);
+        // ======================================
+
+        add(northPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
         // 按钮事件
@@ -58,6 +109,37 @@ public class StudentManagementSystem extends JFrame {
 
         // 初始刷新表格
         refreshTable();
+    }
+
+    // 设置全局字体
+    public static void setUIFont(Font f) {
+        java.util.Enumeration<Object> keys = UIManager.getDefaults().keys();
+        while (keys.hasMoreElements()) {
+            Object key = keys.nextElement();
+            Object value = UIManager.get(key);
+            if (value instanceof javax.swing.plaf.FontUIResource)
+                UIManager.put(key, f);
+        }
+    }
+
+    // 创建美观按钮
+    private JButton createButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("微软雅黑", Font.PLAIN, 15));
+        btn.setFocusPainted(false);
+        btn.setBackground(Color.WHITE);
+        btn.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
+        btn.setPreferredSize(new Dimension(100, 32));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                btn.setBackground(new Color(235, 235, 235));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                btn.setBackground(Color.WHITE);
+            }
+        });
+        return btn;
     }
 
     // 创建表
@@ -143,7 +225,8 @@ public class StudentManagementSystem extends JFrame {
 
     // 添加学生
     private void addStudent() {
-        JPanel panel = new JPanel(new GridLayout(7, 2));
+        JPanel panel = new JPanel(new GridLayout(7, 2, 8, 8));
+        panel.setBackground(new Color(250, 250, 250));
         JTextField idField = new JTextField();
         JTextField nameField = new JTextField();
         JTextField classField = new JTextField();
@@ -166,6 +249,8 @@ public class StudentManagementSystem extends JFrame {
         panel.add(computerField);
         panel.add(new JLabel("体育:"));
         panel.add(peField);
+
+        setDialogFont(panel);
 
         int result = JOptionPane.showConfirmDialog(
                 this, panel, "添加学生信息",
@@ -206,8 +291,8 @@ public class StudentManagementSystem extends JFrame {
                 int computer = Integer.parseInt(computerField.getText());
                 int pe = Integer.parseInt(peField.getText());
 
-                if (!isValidGrade(math) || !isValidGrade(english) || 
-                    !isValidGrade(computer) || !isValidGrade(pe)) {
+                if (!isValidGrade(math) || !isValidGrade(english) ||
+                        !isValidGrade(computer) || !isValidGrade(pe)) {
                     showError("成绩必须在0-100之间!");
                     return;
                 }
@@ -255,7 +340,8 @@ public class StudentManagementSystem extends JFrame {
             return;
         }
 
-        JPanel panel = new JPanel(new GridLayout(7, 2));
+        JPanel panel = new JPanel(new GridLayout(7, 2, 8, 8));
+        panel.setBackground(new Color(250, 250, 250));
         JTextField idField = new JTextField(student.getId());
         JTextField nameField = new JTextField(student.getName());
         JTextField classField = new JTextField(student.getClassName());
@@ -280,6 +366,8 @@ public class StudentManagementSystem extends JFrame {
         panel.add(computerField);
         panel.add(new JLabel("体育:"));
         panel.add(peField);
+
+        setDialogFont(panel);
 
         int result = JOptionPane.showConfirmDialog(
                 this, panel, "修改学生信息",
@@ -307,8 +395,8 @@ public class StudentManagementSystem extends JFrame {
                 int computer = Integer.parseInt(computerField.getText());
                 int pe = Integer.parseInt(peField.getText());
 
-                if (!isValidGrade(math) || !isValidGrade(english) || 
-                    !isValidGrade(computer) || !isValidGrade(pe)) {
+                if (!isValidGrade(math) || !isValidGrade(english) ||
+                        !isValidGrade(computer) || !isValidGrade(pe)) {
                     showError("成绩必须在0-100之间!");
                     return;
                 }
@@ -379,11 +467,11 @@ public class StudentManagementSystem extends JFrame {
         }
         String id = (String) tableModel.getValueAt(selectedRow, 0);
         String name = (String) tableModel.getValueAt(selectedRow, 1);
-        
+
         int confirm = JOptionPane.showConfirmDialog(
-                this, "确定要删除学生 " + name + " (学号: " + id + ") 吗?", "确认删除", 
+                this, "确定要删除学生 " + name + " (学号: " + id + ") 吗?", "确认删除",
                 JOptionPane.YES_NO_OPTION);
-        
+
         if (confirm == JOptionPane.YES_OPTION) {
             String sql = "DELETE FROM students WHERE id=?";
             try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -426,7 +514,7 @@ public class StudentManagementSystem extends JFrame {
                 };
                 tableModel.addRow(rowData);
             }
-            
+
             // 显示查询结果数量
             int rowCount = tableModel.getRowCount();
             if (rowCount == 0) {
@@ -471,7 +559,7 @@ public class StudentManagementSystem extends JFrame {
                         rs.getString("id"), rs.getString("name"),
                         rs.getString("className"), rs.getInt(dbFields[idx])));
             }
-            
+
             if (!hasFailStudents) {
                 sb.append("该课程没有不及格的学生！");
             }
@@ -481,8 +569,20 @@ public class StudentManagementSystem extends JFrame {
 
         JTextArea textArea = new JTextArea(sb.toString(), 15, 40);
         textArea.setEditable(false);
+        textArea.setFont(new Font("微软雅黑", Font.PLAIN, 15));
         JOptionPane.showMessageDialog(this, new JScrollPane(textArea),
                 course + "不及格名单", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // 统一弹窗字体
+    private void setDialogFont(JComponent comp) {
+        Font font = new Font("微软雅黑", Font.PLAIN, 15);
+        for (Component c : comp.getComponents()) {
+            c.setFont(font);
+            if (c instanceof JComponent) {
+                setDialogFont((JComponent) c);
+            }
+        }
     }
 
     private void showError(String msg) {
